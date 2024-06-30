@@ -46,9 +46,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("This bot can send you alerts when one of your positions on HyperLiquid perp is getting near liquidation.\n\n"
                                     "Here is the list of available commands:\n"
-                              "/add <wallet_address> - Add a wallet to the monitoring list\n"
-                              "/list - List the wallets you are monitoring\n"
-                              "/remove <wallet_address> - Stop monitoring a wallet")
+                              "/add <wallet_address> : Add a wallet to the monitoring list\n"
+                              "/list : List the wallets you are monitoring\n"
+                              "/remove <wallet_address> : Stop monitoring a wallet")
 
 def validate_wallet(wallet: str) -> bool:
     return wallet.startswith("0x") and len(wallet) == 42 and all(c in "0123456789abcdefABCDEF" for c in wallet[2:])
