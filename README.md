@@ -1,6 +1,6 @@
 # HyperLiquidation-Bot
 
-![Version](https://img.shields.io/badge/version-1.0-darkgray) ![Python](https://img.shields.io/badge/python-3.9-blue) ![Status](https://img.shields.io/badge/status-active-brightgreen) ![Contributions](https://img.shields.io/badge/contributions-welcome-orange) ![License](https://img.shields.io/badge/license-GPLv3-green) ![Twitter](https://img.shields.io/badge/twitter-%40the_ecoinomist-blue)
+![Version](https://img.shields.io/badge/version-1.0-darkgray) ![Python](https://img.shields.io/badge/python-3.9-blue) ![Status](https://img.shields.io/badge/status-active-brightgreen) ![Contributions](https://img.shields.io/badge/contributions-welcome-orange) ![License](https://img.shields.io/badge/license-GPLv3-green) ![Twitter](https://img.shields.io/badge/twitter-%40the%5Fecoinomist-blue)
 
 A Telegram bot to monitor when your margin ratio is above a threshold on HyperLiquid trading platform.
 &nbsp;
