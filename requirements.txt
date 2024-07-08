@@ -1,0 +1,4 @@
+requests
+python-dotenv
+hyperliquid-python-sdk
+python-telegram-bot

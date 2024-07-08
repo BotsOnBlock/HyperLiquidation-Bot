@@ -226,18 +226,20 @@ def check_wallet_positions(data, wallet_address):
             coin = pos_data['coin']
             current_price = get_mark_price(data, coin)
             liquidation_price = pos_data['liquidationPx']
-            if liquidation_price is None:
+            entry_price = float(pos_data['entryPx'])
+            uPnL = float(pos_data['unrealizedPnl'])
+            if liquidation_price is None or uPnL > 0:
                 continue
             else:
                 liquidation_price = float(liquidation_price) 
-                move_before_liq = abs(current_price - liquidation_price) / current_price
+                move_before_liq = abs(entry_price - current_price) / abs(entry_price - liquidation_price)
                 if move_before_liq > BASE_ALERT_THRESHOLD:
                     alert_message = (
                         f"⚠️ *Isolated position liquidation risk alert* ⚠️\n"
-                        f"Wallet: {wallet_address}\n"
+                        f"Wallet: *{wallet_address[:8] + '...' + wallet_address[-6:]}*\n"
                         f"Position at risk: {coin}\n"
-                        f"Current price: {current_price}\n"
-                        f"Liquidation price: {liquidation_price}\n"
+                        f"Current price: ${current_price}\n"
+                        f"Liquidation price: ${liquidation_price}\n"
                     )
                     for user_id in wallets[wallet_address]:
                         send_message(user_id, alert_message)
@@ -250,12 +252,6 @@ def send_message(user_id, message):
     message = urllib.parse.quote(message)
     send_text = 'https://api.telegram.org/bot' + telegram_token + '/sendMessage?chat_id=' + str(user_id) + '&parse_mode=Markdown&text=' + message
     response = requests.get(send_text)
-
-# def on_event(event):
-#     print(f"\n\nEvent received: {event}")
-    # for ev in event['data']:
-    #     if ev['type'] == 'liquidation':
-    #         print(f"Liquidation event detected: {ev}")
 
 def main() -> None:
     read_settings()
@@ -272,8 +268,6 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, {
         "callback": lambda update, context: None
     }))
-
-    # info.subscribe({ "type": "notification", "user": "0x1FD15aFd03D6b970b2bd6F6a18c6e2f7cFF8E125" }, on_event) 
 
     # Start the position checking in a separate thread
     threading.Thread(target=check_positions, daemon=True).start()
