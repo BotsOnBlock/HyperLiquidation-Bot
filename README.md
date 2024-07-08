@@ -44,5 +44,6 @@ And edit the required fields. You can get the Telegram token by talking to the B
 -   Add a command to get a wallet's overview
 -   Use keyboards to improve the interactions with the bot
 </br>
-Feel free to contribute to this project by sending a pull request.
+
+Feel free to contribute to this project by sending a pull request.   
 You can also contact me on X [@the_ecoinomist](https://x.com/the_ecoinomist) if you have any questions or suggestions.
