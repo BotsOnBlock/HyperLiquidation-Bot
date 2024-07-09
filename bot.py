@@ -3,8 +3,7 @@ import json
 import requests
 import urllib.parse
 import threading
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
 from hyperliquid.info import Info
@@ -24,7 +23,7 @@ load_dotenv()
 telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
 
 BASE_ALERT_THRESHOLD = 0.70
-REFRESH_INTERVAL = 600 # 10 minutes
+REFRESH_INTERVAL = 150 # 2 minutes 30 seconds
 
 wallets: Dict[str, List[int]] = {}
 info = Info(constants.MAINNET_API_URL, skip_ws=False)
@@ -161,10 +160,19 @@ def check_positions():
         if not data:
             time.sleep(60)
             continue
+
+        start_time = time.time()
         with ThreadPoolExecutor(max_workers=32) as executor:  
-            executor.map(partial(check_wallet_positions, data), local_wallets.keys())
+            futures = [executor.submit(check_wallet_positions, data, wallet) for wallet in local_wallets.keys()]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"An error occurred while checking a wallet: {e}")
         print("Positions checked.")
-        time.sleep(REFRESH_INTERVAL)  
+        elapsed_time = time.time() - start_time
+        wait_time = max(0, REFRESH_INTERVAL - elapsed_time)
+        time.sleep(wait_time)
 
 def check_wallet_positions(data, wallet_address):
     try:
