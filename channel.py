@@ -60,24 +60,47 @@ def send_message(message):
 
 
 def maitain_ws():
+    reconnect_delay = 5  # Start with a 5-second delay
+    max_reconnect_delay = 300  # Maximum delay of 5 minutes
+
     while True:
         try:
             info = Info(constants.MAINNET_API_URL, skip_ws=False)
-            r = info.subscribe({ "type": "userEvents", "user": liq_vault}, on_event)
+            r = info.subscribe({"type": "userEvents", "user": liq_vault}, on_event)
             logging.info("Subscribed to user events: %s", r)
 
+            # Wait for the websocket to connect
             while not (info.ws_manager.ws.sock and info.ws_manager.ws.sock.connected):
-                logging.info("Connecting to websocket...")
-                time.sleep(5)
+                logging.info("Waiting for websocket to connect...")
+                time.sleep(1)
 
+            logging.info("Websocket connected successfully")
+
+            # Reset reconnect delay on successful connection
+            reconnect_delay = 5
+
+            # Monitor the connection
             while info.ws_manager.ws.sock and info.ws_manager.ws.sock.connected:
-                time.sleep(30)  # Check every minute
+                time.sleep(30)  # Check every 30 seconds
 
-            info = None
-            logging.warning("Websocket connection closed. Reconnecting...")
+            logging.warning("Websocket connection closed. Preparing to reconnect...")
+
         except Exception as e:
             logging.error("Error in subscription: %s", e)
-            time.sleep(5)
+
+        finally:
+            # Clean up resources
+            if info:
+                try:
+                    info.ws_manager.close()
+                except:
+                    pass
+                info = None
+
+            # Implement exponential backoff for reconnection
+            logging.info(f"Reconnecting in {reconnect_delay} seconds...")
+            time.sleep(reconnect_delay)
+            reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
 
 
 if __name__ == "__main__":
