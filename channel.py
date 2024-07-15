@@ -1,19 +1,22 @@
+import json
 import time
 import logging
 import requests
 import urllib.parse
 import os
 from dotenv import load_dotenv
-from hyperliquid.info import Info
-from hyperliquid.utils import constants
+import websocket
+import threading
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 load_dotenv()
-telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
-chat_id = os.getenv('TELEGRAM_CHAT_ID')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-liq_vault = "0x2e3d94f0562703b25c83308a05046ddaf9a8dd14"
+MAINNET_WS_URL = 'wss://api.hyperliquid.xyz/ws'
+LIQ_VAULT = "0x2e3d94f0562703b25c83308a05046ddaf9a8dd14"
 
 class Liquidation:
     def __init__(self, price, size, asset, markPrice):
@@ -25,83 +28,104 @@ class Liquidation:
     def __str__(self):
         return f"• {self.asset}\n  Size: {self.size}\n  Price: {self.price}\n  Mark Price: {self.markPrice}\n  **${round(self.size * self.price, 2)}**\n"
 
-    def __repr__(self):
-        return self.__str__()
-    
-def on_event(event):
-    try: 
-        if "data" in event and "fills" in event["data"]:
+def send_message(message):
+    message = urllib.parse.quote(message)
+    send_text = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&parse_mode=Markdown&text={message}'
+    response = requests.get(send_text)
+    if response.status_code != 200:
+        logger.error(f"Failed to send Telegram message: {response.text}")
+
+def on_message(ws, message):
+    try:
+        event = json.loads(message)
+        if event.get("channel") == "pong":
+            logger.debug("Received pong from server")
+        elif event.get("channel") == "subscriptionResponse":
+            logger.debug(f"Subscription response: {event}")
+        elif event.get("channel") == "user":
+            on_user_event(event.get("data", {}))
+        else:
+            logger.warning(f"Received message: {message}")
+    except json.JSONDecodeError:
+        logger.warning(f"Received non-JSON message: {message}")
+
+def on_user_event(event):
+    try:
+        if "fills" in event:
             liquidations = []
             dir = ""
-            for fill in event["data"]["fills"]:
+            for fill in event["fills"]:
                 if "liquidation" in fill:
                     dir = fill["dir"]
-                    price = float(fill["px"])
-                    size = float(fill["sz"])
-                    asset = fill["coin"]
-                    markPrice = float(fill["liquidation"]["markPx"])
-                    liquidation = Liquidation(price, size, asset, markPrice)
+                    liquidation = Liquidation(
+                        float(fill["px"]),
+                        float(fill["sz"]),
+                        fill["coin"],
+                        float(fill["liquidation"]["markPx"])
+                    )
                     liquidations.append(liquidation)
             if liquidations:
                 emoji = "📉" if "Long" in dir else "📈"
                 message = f"{emoji} *{dir}*\n"
                 for liquidation in liquidations:
                     message += str(liquidation) + "\n"
-                logging.info(message)
+                logger.info(message)
                 send_message(message)
-
     except Exception as e:
-        logging.error("Error in on_event: %s", e)
+        logger.error(f"Error in on_user_event: {e}")
 
-def send_message(message):
-    message = urllib.parse.quote(message)
-    send_text = 'https://api.telegram.org/bot' + telegram_token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + message
-    response = requests.get(send_text)
+def send_ping(ws):
+    while True:
+        time.sleep(30)
+        if ws.sock and ws.sock.connected:
+            ping_message = json.dumps({"method": "ping"})
+            ws.send(ping_message)
+            logger.debug(f"Sent ping: {ping_message}")
+        else:
+            logger.warning("WebSocket is not connected. Stopping ping.")
+            break
 
+def on_open(ws):
+    logger.info("WebSocket connected successfully")
+    subscription = json.dumps({
+        "method": "subscribe",
+        "subscription": {"type": "userEvents", "user": LIQ_VAULT}
+    })
+    ws.send(subscription)
+    logger.debug(f"Sent subscription request: {subscription}")
 
-def maitain_ws():
+    # Start the ping thread here
+    ping_thread = threading.Thread(target=send_ping, args=(ws,))
+    ping_thread.daemon = True
+    ping_thread.start()
+
+def on_close(ws, close_status_code, close_msg):
+    logger.warning(f"WebSocket connection closed: {close_status_code} - {close_msg}")
+
+def on_error(ws, error):
+    logger.error(f"WebSocket error: {error}")
+
+def maintain_ws():
     reconnect_delay = 5  # Start with a 5-second delay
     max_reconnect_delay = 300  # Maximum delay of 5 minutes
 
     while True:
         try:
-            info = Info(constants.MAINNET_API_URL, skip_ws=False)
-            r = info.subscribe({"type": "userEvents", "user": liq_vault}, on_event)
-            logging.info("Subscribed to user events: %s", r)
+            ws = websocket.WebSocketApp(
+                MAINNET_WS_URL,
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close
+            )
 
-            # Wait for the websocket to connect
-            while not (info.ws_manager.ws.sock and info.ws_manager.ws.sock.connected):
-                logging.info("Waiting for websocket to connect...")
-                time.sleep(1)
-
-            logging.info("Websocket connected successfully")
-
-            # Reset reconnect delay on successful connection
-            reconnect_delay = 5
-
-            # Monitor the connection
-            while info.ws_manager.ws.sock and info.ws_manager.ws.sock.connected:
-                time.sleep(30)  # Check every 30 seconds
-
-            logging.warning("Websocket connection closed. Preparing to reconnect...")
-
+            ws.run_forever()
         except Exception as e:
-            logging.error("Error in subscription: %s", e)
-
+            logger.error(f"Error in WebSocket connection: {e}")
         finally:
-            # Clean up resources
-            if info:
-                try:
-                    info.ws_manager.close()
-                except:
-                    pass
-                info = None
-
-            # Implement exponential backoff for reconnection
-            logging.info(f"Reconnecting in {reconnect_delay} seconds...")
+            logger.info(f"Reconnecting in {reconnect_delay} seconds...")
             time.sleep(reconnect_delay)
             reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
 
-
 if __name__ == "__main__":
-    maitain_ws()
+    maintain_ws()
