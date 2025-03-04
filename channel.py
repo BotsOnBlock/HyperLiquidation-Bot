@@ -19,14 +19,14 @@ MAINNET_WS_URL = 'wss://api.hyperliquid.xyz/ws'
 LIQ_VAULT = "0x2e3d94f0562703b25c83308a05046ddaf9a8dd14"
 
 class Liquidation:
-    def __init__(self, price, size, asset, markPrice):
-        self.price = price
+    def __init__(self, value, size, asset, markPrice):
         self.size = size
+        self.total_value = value
         self.asset = asset
         self.markPrice = markPrice
 
     def __str__(self):
-        return f"• {self.asset}\n  Size: {self.size}\n  Price: {self.price}\n  Mark Price: {self.markPrice}\n  **${round(self.size * self.price, 2)}**\n"
+        return f"• {self.asset}\n  Size: {self.size}\n  Value: ${self.total_value:.2f}\n  Mark Price: {self.markPrice}**\n"
 
 def send_message(message):
     message = urllib.parse.quote(message)
@@ -52,23 +52,39 @@ def on_message(ws, message):
 def on_user_event(event):
     try:
         if "fills" in event:
-            liquidations = []
+            liquidations_by_token = {}
             dir = ""
             for fill in event["fills"]:
                 if "liquidation" in fill:
                     dir = fill["dir"]
-                    liquidation = Liquidation(
-                        float(fill["px"]),
-                        float(fill["sz"]),
-                        fill["coin"],
-                        float(fill["liquidation"]["markPx"])
-                    )
-                    liquidations.append(liquidation)
-            if liquidations:
+                    token = fill["coin"]
+                    price = float(fill["px"])
+                    size = float(fill["sz"])
+                    mark_price = float(fill["liquidation"]["markPx"])
+                    
+                    if token not in liquidations_by_token:
+                        liquidations_by_token[token] = {
+                            "total_size": 0,
+                            "total_value": 0,
+                            "mark_price": mark_price
+                        }
+                    
+                    liquidations_by_token[token]["total_size"] += size
+                    liquidations_by_token[token]["total_value"] += size * price
+            
+            if liquidations_by_token:
                 emoji = "📉" if "Long" in dir else "📈"
                 message = f"{emoji} *{dir}*\n"
-                for liquidation in liquidations:
+                
+                for token, data in liquidations_by_token.items():
+                    liquidation = Liquidation(
+                        data["total_value"],
+                        data["total_size"],
+                        token,
+                        data["mark_price"]
+                    )
                     message += str(liquidation) + "\n"
+                
                 logger.info(message)
                 send_message(message)
     except Exception as e:
