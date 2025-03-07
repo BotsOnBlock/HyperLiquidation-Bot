@@ -26,7 +26,7 @@ class Liquidation:
         self.markPrice = markPrice
 
     def __str__(self):
-        return f"• {self.asset}\n  Size: {self.size}\n  Value: ${self.total_value:.2f}\n  Mark Price: {self.markPrice}**\n"
+        return f"• {self.asset}\n  Size: {self.size:,.2f}\n  Value: ${self.total_value:,.2f}\n  Mark Price: {self.markPrice:,g}**\n"
 
 def send_message(message):
     message = urllib.parse.quote(message)
